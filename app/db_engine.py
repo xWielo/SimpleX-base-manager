@@ -63,6 +63,7 @@ class SqlCipherSession:
         self._keys: DerivedKeys | None = None
         self._conn: sqlite3.Connection | None = None
         self._page_size = DEFAULT_PAGE_SIZE
+        self._zip_entry_name: str | None = None
 
     def open(self) -> None:
         """
@@ -163,12 +164,17 @@ class SqlCipherSession:
                     return None
 
                 # Preferuj simplex_v1_chat.db (główna baza aplikacji)
+                chosen = None
                 for f in db_files:
                     if 'simplex_v1_chat' in f.lower():
-                        return zf.read(f)
+                        chosen = f
+                        break
+                if chosen is None:
+                    # Jeśli nie ma, weź pierwszy .db
+                    chosen = db_files[0]
 
-                # Jeśli nie ma, weź pierwszy .db
-                return zf.read(db_files[0])
+                self._zip_entry_name = chosen
+                return zf.read(chosen)
         except (zipfile.BadZipFile, OSError):
             # Nie ZIP - zwróć None i spróbuj zwykły plik
             return None
@@ -256,11 +262,30 @@ class SqlCipherSession:
 
         tmp_path = self.db_path + ".tmp_write"
         try:
-            with open(tmp_path, "wb") as f:
-                f.write(encrypted_bytes)
+            if self._zip_entry_name is not None:
+                self._flush_zip(tmp_path, encrypted_bytes)
+            else:
+                with open(tmp_path, "wb") as f:
+                    f.write(encrypted_bytes)
             Path(tmp_path).replace(self.db_path)
         except OSError as exc:
             raise DbEngineError(f"Blad zapisu pliku na dysk: {exc}") from exc
+
+    def _flush_zip(self, tmp_path: str, encrypted_bytes: bytes) -> None:
+        """
+        Zrodlowy plik byl archiwum ZIP - przepisuje WSZYSTKIE oryginalne
+        wpisy archiwum do nowego pliku ZIP, podmieniajac wylacznie wpis
+        bazy danych (self._zip_entry_name) na swiezo zaszyfrowana wersje.
+        Bez tego zapis nadpisywalby cale archiwum (razem z inna baza,
+        np. simplex_v1_compat_*.db) samym plikiem .db, niszczac paczke.
+        """
+        with zipfile.ZipFile(self.db_path, 'r') as src_zf:
+            with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as dst_zf:
+                for item in src_zf.infolist():
+                    if item.filename == self._zip_entry_name:
+                        dst_zf.writestr(item, encrypted_bytes)
+                    else:
+                        dst_zf.writestr(item, src_zf.read(item.filename))
 
     def list_tables(self) -> list[str]:
         res = self.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
@@ -272,3 +297,4 @@ class SqlCipherSession:
             self._conn.close()
             self._conn = None
         self._keys = None
+        self._zip_entry_name = None
