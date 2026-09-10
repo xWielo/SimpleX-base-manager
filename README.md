@@ -1,5 +1,7 @@
 # SimpleX Vault Reader
 
+PS. w razie problemow stworz issue
+
 Lokalna, czarno-biala aplikacja GUI do przegladania wlasnej zaszyfrowanej
 bazy SimpleX Chat (SQLCipher). Format SQLCipher jest zaimplementowany od
 zera w czystym Pythonie - nie jest wymagana zadna zewnetrzna binarka
