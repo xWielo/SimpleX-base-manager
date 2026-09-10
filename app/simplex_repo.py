@@ -70,7 +70,19 @@ class SimplexRepo:
         self._require_table("users")
         cols = self._table_columns("users")
 
+        if not cols:
+            raise SchemaError(
+                "Tabela 'users' istnieje, ale nie zawiera żadnych kolumn. "
+                "Baza może być uszkodzona."
+            )
+
         name_col = "local_display_name" if "local_display_name" in cols else "displayName"
+        if name_col not in cols and "displayName" not in cols:
+            raise SchemaError(
+                f"Nie znaleziono kolumny nazwy użytkownika. "
+                f"Dostępne kolumny: {', '.join(sorted(cols))}"
+            )
+
         hidden_col = "view_pwd_hash" if "view_pwd_hash" in cols else None
         active_col = "active_user" if "active_user" in cols else None
 
@@ -84,6 +96,13 @@ class SimplexRepo:
 
         sql = f"SELECT {', '.join(select_cols)} FROM users ORDER BY user_id;"
         res = self.session.query(sql)
+
+        if not res.rows:
+            raise SchemaError(
+                "Tabela 'users' istnieje i ma prawidłową strukturę, "
+                "ale nie zawiera żadnych wierszy (żadnych profili). "
+                "Sprawdź, czy hasło bazy danych jest poprawne."
+            )
 
         profiles = []
         for row in res.rows:

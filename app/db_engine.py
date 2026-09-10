@@ -91,9 +91,10 @@ class SqlCipherSession:
         wykonywane zapytania.
         """
         try:
-            if self.db_path.lower().endswith('.zip'):
-                raw = self._extract_db_from_zip(self.db_path)
-            else:
+            # Najpierw spróbuj otworzyć jako ZIP (niezależnie od rozszerzenia)
+            raw = self._try_extract_db_from_zip(self.db_path)
+            if raw is None:
+                # Jeśli to nie ZIP, otwórz jako zwykły plik .db
                 with open(self.db_path, "rb") as f:
                     raw = f.read()
         except OSError as exc:
@@ -148,23 +149,29 @@ class SqlCipherSession:
             ) from exc
         self._conn = conn
 
-    def _extract_db_from_zip(self, zip_path: str) -> bytes:
+    def _try_extract_db_from_zip(self, zip_path: str) -> bytes | None:
         """
-        Rozpakuj plik .db z archiwum .zip bez zapisywania na dysk.
-        Szuka pliku o rozszerzeniu .db wewnątrz archiwum; jeśli jest
-        kilka, zwraca pierwszy znaleziony. Wszystko dzieje się w pamięci.
+        Spróbuj rozpakować plik .db z archiwum .zip bez zapisywania na dysk.
+        Preferuje simplex_v1_chat.db (główna baza aplikacji), ale akceptuje
+        dowolny .db plik. Wszystko dzieje się w pamięci.
+        Zwraca None jeśli plik nie jest archiwum ZIP.
         """
         try:
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 db_files = [f for f in zf.namelist() if f.lower().endswith('.db')]
                 if not db_files:
-                    raise DbEngineError(
-                        "Nie znaleziono pliku .db wewnątrz archiwum .zip"
-                    )
-                db_file_in_zip = db_files[0]
-                return zf.read(db_file_in_zip)
-        except zipfile.BadZipFile as exc:
-            raise DbEngineError(f"Plik nie jest prawidłowym archiwum ZIP: {exc}") from exc
+                    return None
+
+                # Preferuj simplex_v1_chat.db (główna baza aplikacji)
+                for f in db_files:
+                    if 'simplex_v1_chat' in f.lower():
+                        return zf.read(f)
+
+                # Jeśli nie ma, weź pierwszy .db
+                return zf.read(db_files[0])
+        except (zipfile.BadZipFile, OSError):
+            # Nie ZIP - zwróć None i spróbuj zwykły plik
+            return None
 
     def _detect_page_size(self, raw: bytes, keys: DerivedKeys) -> int:
         """
