@@ -21,6 +21,7 @@ zapisu.
 from __future__ import annotations
 
 import sqlite3
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,8 +91,11 @@ class SqlCipherSession:
         wykonywane zapytania.
         """
         try:
-            with open(self.db_path, "rb") as f:
-                raw = f.read()
+            if self.db_path.lower().endswith('.zip'):
+                raw = self._extract_db_from_zip(self.db_path)
+            else:
+                with open(self.db_path, "rb") as f:
+                    raw = f.read()
         except OSError as exc:
             raise DbEngineError(f"Nie mozna otworzyc pliku bazy: {exc}") from exc
 
@@ -143,6 +147,24 @@ class SqlCipherSession:
                 f"wynikowej struktury jako bazy danych: {exc}"
             ) from exc
         self._conn = conn
+
+    def _extract_db_from_zip(self, zip_path: str) -> bytes:
+        """
+        Rozpakuj plik .db z archiwum .zip bez zapisywania na dysk.
+        Szuka pliku o rozszerzeniu .db wewnątrz archiwum; jeśli jest
+        kilka, zwraca pierwszy znaleziony. Wszystko dzieje się w pamięci.
+        """
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                db_files = [f for f in zf.namelist() if f.lower().endswith('.db')]
+                if not db_files:
+                    raise DbEngineError(
+                        "Nie znaleziono pliku .db wewnątrz archiwum .zip"
+                    )
+                db_file_in_zip = db_files[0]
+                return zf.read(db_file_in_zip)
+        except zipfile.BadZipFile as exc:
+            raise DbEngineError(f"Plik nie jest prawidłowym archiwum ZIP: {exc}") from exc
 
     def _detect_page_size(self, raw: bytes, keys: DerivedKeys) -> int:
         """

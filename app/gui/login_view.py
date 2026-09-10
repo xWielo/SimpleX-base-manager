@@ -44,7 +44,7 @@ class LoginView(ttk.Frame):
         card.grid(row=2, column=0, sticky="ew")
         card.columnconfigure(0, weight=1)
 
-        path_label = ttk.Label(card, text="Plik bazy (simplex_v1_chat.db)", style="BodyOnCard.TLabel")
+        path_label = ttk.Label(card, text="Plik bazy (.db lub .zip)", style="BodyOnCard.TLabel")
         path_label.grid(row=0, column=0, sticky="w")
 
         path_row = ttk.Frame(card, style="Card.TFrame")
@@ -90,7 +90,12 @@ class LoginView(ttk.Frame):
     def _browse(self) -> None:
         path = filedialog.askopenfilename(
             title="Wybierz plik bazy SimpleX",
-            filetypes=[("Baza SimpleX", "*.db"), ("Wszystkie pliki", "*.*")],
+            filetypes=[
+                ("Baza lub archiwum", "*.db *.zip"),
+                ("Baza SimpleX", "*.db"),
+                ("Archiwum", "*.zip"),
+                ("Wszystkie pliki", "*.*"),
+            ],
         )
         if path:
             self._db_path_var.set(path)
