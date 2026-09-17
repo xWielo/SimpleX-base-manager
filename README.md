@@ -180,3 +180,7 @@ repo = SimplexRepo(session)
 print(repo.list_profiles())
 session.close()
 ```
+
+
+SimpleX database password reset
+
